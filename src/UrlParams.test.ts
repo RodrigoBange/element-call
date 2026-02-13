@@ -367,6 +367,49 @@ describe("UrlParams", () => {
     });
   });
 
+  describe("audioInputNoiseGate", () => {
+    it("defaults to false", () => {
+      expect(computeUrlParams().audioInputNoiseGate).toBe(false);
+    });
+
+    it("is parsed", () => {
+      expect(computeUrlParams("?audioInputNoiseGate=true").audioInputNoiseGate)
+        .toBe(true);
+      expect(computeUrlParams("?audioInputNoiseGate=false").audioInputNoiseGate)
+        .toBe(false);
+    });
+  });
+
+  describe("audioInputNoiseGateThresholdDb", () => {
+    it("defaults to -60", () => {
+      expect(computeUrlParams().audioInputNoiseGateThresholdDb).toBe(-60);
+    });
+
+    it("is parsed", () => {
+      expect(computeUrlParams("?audioInputNoiseGateThresholdDb=-50")
+        .audioInputNoiseGateThresholdDb).toBe(-50);
+      expect(computeUrlParams("?audioInputNoiseGateThresholdDb=not-a-number")
+        .audioInputNoiseGateThresholdDb).toBe(-60);
+    });
+  });
+
+  describe("maxParticipantVolumePercent", () => {
+    it("defaults to 100", () => {
+      expect(computeUrlParams().maxParticipantVolumePercent).toBe(100);
+    });
+
+    it("is parsed and clamped", () => {
+      expect(computeUrlParams("?maxParticipantVolumePercent=150")
+        .maxParticipantVolumePercent).toBe(150);
+      expect(computeUrlParams("?maxParticipantVolumePercent=999")
+        .maxParticipantVolumePercent).toBe(200);
+      expect(computeUrlParams("?maxParticipantVolumePercent=-1")
+        .maxParticipantVolumePercent).toBe(0);
+      expect(computeUrlParams("?maxParticipantVolumePercent=bad")
+        .maxParticipantVolumePercent).toBe(100);
+    });
+  });
+
   describe("header", () => {
     it("uses header if provided", () => {
       expect(computeUrlParams("?header=app_bar&hideHeader=true").header).toBe(

@@ -51,6 +51,7 @@ import { type GridTileViewModel } from "../state/TileViewModel";
 import { useMergedRefs } from "../useMergedRefs";
 import { useReactionsSender } from "../reactions/useReactionsSender";
 import { useBehavior } from "../useBehavior";
+import { useUrlParams } from "../UrlParams";
 
 interface TileProps {
   ref?: Ref<HTMLDivElement>;
@@ -294,6 +295,7 @@ const RemoteUserMediaTile: FC<RemoteUserMediaTileProps> = ({
   ...props
 }) => {
   const { t } = useTranslation();
+  const { maxParticipantVolumePercent } = useUrlParams();
   const waitingForMedia = useBehavior(vm.waitingForMedia$);
   const locallyMuted = useBehavior(vm.locallyMuted$);
   const localVolume = useBehavior(vm.localVolume$);
@@ -336,7 +338,7 @@ const RemoteUserMediaTile: FC<RemoteUserMediaTileProps> = ({
               onValueChange={onChangeLocalVolume}
               onValueCommit={onCommitLocalVolume}
               min={0}
-              max={1}
+              max={maxParticipantVolumePercent / 100}
               step={0.01}
             />
           </MenuItem>

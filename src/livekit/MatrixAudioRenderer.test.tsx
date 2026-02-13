@@ -77,6 +77,7 @@ function renderTestComponent(
     kind: Track.Kind;
     source: Track.Source;
   }[],
+  participantVolumeByIdentity?: Record<string, number>,
 ): RenderResult {
   const liveKitParticipants = livekitParticipantIdentities.map((identity) =>
     mockRemoteParticipant({ identity }),
@@ -111,6 +112,7 @@ function renderTestComponent(
         validIdentities={participants.map((p) => p.identity)}
         livekitRoom={livekitRoom}
         url={""}
+        participantVolumeByIdentity={participantVolumeByIdentity}
       />
     </MediaDevicesProvider>,
   );
@@ -279,4 +281,17 @@ it("should setup audioContext gain and pan", () => {
 
   expect(testAudioContext.gain.gain.value).toEqual(0.1);
   expect(testAudioContext.pan.pan.value).toEqual(1);
+});
+
+it("should setup audioContext when participant volume boost is used", () => {
+  renderTestComponent(
+    [{ userId: "@bob", deviceId: "DEV0" }],
+    ["@bob:DEV0"],
+    undefined,
+    { "@bob:DEV0": 1.5 },
+  );
+
+  const audioTrack = tracks[0].publication.track! as RemoteAudioTrack;
+  expect(audioTrack.setAudioContext).toHaveBeenCalled();
+  expect(audioTrack.setWebAudioPlugins).toHaveBeenCalled();
 });

@@ -53,7 +53,7 @@ import { type IMembershipManager } from "matrix-js-sdk/lib/matrixrtc/IMembership
 import {
   LocalUserMediaViewModel,
   type MediaViewModel,
-  type RemoteUserMediaViewModel,
+  RemoteUserMediaViewModel,
   ScreenShareViewModel,
   type UserMediaViewModel,
 } from "../MediaViewModel";
@@ -282,6 +282,8 @@ export interface CallViewModel {
   allConnections$: Behavior<ConnectionManagerData>;
   /** Participants sorted by livekit room so they can be used in the audio rendering */
   livekitRoomItems$: Behavior<LivekitRoomItem[]>;
+  /** Effective per-participant output volume keyed by rtcBackendIdentity. */
+  participantVolumeByIdentity$: Behavior<Record<string, number>>;
   userMedia$: Behavior<UserMedia[]>;
   /** use the layout instead, this is just for the sdk export. */
   matrixLivekitMembers$: Behavior<RemoteMatrixLivekitMember[]>;
@@ -791,6 +793,28 @@ export function createCallViewModel$(
           );
         },
       ),
+    ),
+  );
+
+  const participantVolumeByIdentity$ = scope.behavior<
+    Record<string, number>
+  >(
+    userMedia$.pipe(
+      switchMap((userMedia) => {
+        const remoteMedia = userMedia
+          .map((m) =>
+            m.vm instanceof RemoteUserMediaViewModel ? m.vm : null,
+          )
+          .filter((vm): vm is RemoteUserMediaViewModel => vm !== null);
+        if (remoteMedia.length === 0) return of({});
+        return combineLatest(
+          remoteMedia.map((vm) =>
+            vm.effectiveLocalVolume$.pipe(
+              map((volume) => [vm.rtcBackendIdentity, volume] as const),
+            ),
+          ),
+        ).pipe(map((entries) => Object.fromEntries(entries)));
+      }),
     ),
   );
 
@@ -1531,6 +1555,7 @@ export function createCallViewModel$(
     ),
     allConnections$,
     participantCount$: participantCount$,
+    participantVolumeByIdentity$: participantVolumeByIdentity$,
     handsRaised$: handsRaised$,
     reactions$: reactions$,
     joinSoundEffect$: joinSoundEffect$,

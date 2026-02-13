@@ -48,6 +48,7 @@ export class Publisher {
   public shouldPublish = false;
 
   private readonly scope = new ObservableScope();
+  private noiseGateCleanup?: () => void;
 
   /**
    * Creates a new Publisher.
@@ -77,6 +78,7 @@ export class Publisher {
     this.observeMediaDevices(this.scope, devices, controlledAudioDevices);
 
     this.workaroundRestartAudioInputTrackChrome(devices, this.scope);
+    this.setupAudioInputNoiseGate();
 
     this.connection.livekitRoom.localParticipant.on(
       ParticipantEvent.LocalTrackPublished,
@@ -85,6 +87,8 @@ export class Publisher {
   }
 
   public async destroy(): Promise<void> {
+    this.noiseGateCleanup?.();
+    this.noiseGateCleanup = undefined;
     this.scope.end();
     this.logger.info("Scope ended -> unset handler");
     this.muteStates.audio.unsetHandler();
@@ -271,6 +275,91 @@ export class Publisher {
   }
 
   /// Private methods
+
+  private setupAudioInputNoiseGate(): void {
+    const { audioInputNoiseGate, audioInputNoiseGateThresholdDb } =
+      getUrlParams();
+    if (!audioInputNoiseGate) return;
+
+    const lkRoom = this.connection.livekitRoom;
+    const sampleBuffer = new Float32Array(2048);
+    let gateOpen = true;
+    let pendingGateChange = false;
+    let currentSourceTrack: MediaStreamTrack | null = null;
+    let audioContext: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let sourceNode: MediaStreamAudioSourceNode | null = null;
+
+    const teardownAudioNodes = (): void => {
+      sourceNode?.disconnect();
+      sourceNode = null;
+      analyser = null;
+      currentSourceTrack = null;
+      if (audioContext) {
+        void audioContext.close();
+        audioContext = null;
+      }
+    };
+
+    const setGate = async (open: boolean): Promise<void> => {
+      if (open === gateOpen || pendingGateChange || !this.shouldPublish) return;
+      const track = lkRoom.localParticipant.getTrackPublication(
+        Track.Source.Microphone,
+      )?.track;
+      if (!track) return;
+      pendingGateChange = true;
+      try {
+        if (open) {
+          await track.resumeUpstream();
+        } else {
+          await track.pauseUpstream();
+        }
+        gateOpen = open;
+      } catch (e) {
+        this.logger.error(`Failed to apply audio input noise gate`, e);
+      } finally {
+        pendingGateChange = false;
+      }
+    };
+
+    const tick = (): void => {
+      if (!this.shouldPublish || !this.muteStates.audio.enabled$.value) return;
+
+      const publication = lkRoom.localParticipant.getTrackPublication(
+        Track.Source.Microphone,
+      );
+      const sourceTrack = publication?.track?.mediaStreamTrack;
+      if (!sourceTrack || sourceTrack.readyState === "ended") {
+        return;
+      }
+
+      if (sourceTrack !== currentSourceTrack) {
+        teardownAudioNodes();
+        currentSourceTrack = sourceTrack;
+        audioContext = new AudioContext();
+        sourceNode = audioContext.createMediaStreamSource(
+          new MediaStream([sourceTrack]),
+        );
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = sampleBuffer.length;
+        sourceNode.connect(analyser);
+      }
+
+      if (!analyser) return;
+      analyser.getFloatTimeDomainData(sampleBuffer);
+      let sumSquares = 0;
+      for (const sample of sampleBuffer) sumSquares += sample * sample;
+      const rms = Math.sqrt(sumSquares / sampleBuffer.length);
+      const db = rms > 0 ? 20 * Math.log10(rms) : -100;
+      void setGate(db >= audioInputNoiseGateThresholdDb);
+    };
+
+    const intervalId = setInterval(tick, 80);
+    this.noiseGateCleanup = (): void => {
+      clearInterval(intervalId);
+      teardownAudioNodes();
+    };
+  }
 
   // Restart the audio input track whenever we detect that the active media
   // device has changed to refer to a different hardware device. We do this

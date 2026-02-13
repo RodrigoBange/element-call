@@ -22,7 +22,8 @@ module.exports = {
         // Create a descriptor that we can use to target our direct dependencies
         const projectPath = config.projectCwd
           .replace(/\\/g, "/")
-          .replace("/C:/", "C:/");
+          // Yarn can provide Windows paths as "/D:/path"; drop the leading slash for any drive letter.
+          .replace(/^\/([A-Za-z]:\/)/, "$1");
         const manifestPath = path.join(projectPath, "package.json");
         const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
         const selfDescriptor = structUtils.parseDescriptor(

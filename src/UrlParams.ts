@@ -244,6 +244,21 @@ export interface UrlConfiguration {
    * Defaults to true.
    */
   noiseSuppression?: boolean;
+  /**
+   * Whether to apply a mic send-path noise gate.
+   * Defaults to false.
+   */
+  audioInputNoiseGate: boolean;
+  /**
+   * Mic gate threshold in dB. Audio below this threshold will be gated out.
+   * Defaults to -60.
+   */
+  audioInputNoiseGateThresholdDb: number;
+  /**
+   * Maximum allowed per-participant volume in percent.
+   * Defaults to 100 and is clamped to 200.
+   */
+  maxParticipantVolumePercent: number;
 
   callIntent?: RTCCallIntent;
 }
@@ -327,6 +342,14 @@ class ParamParser {
     const param = this.getParam(name);
     return param !== null ? param !== "false" : undefined;
   }
+
+  public getNumberParam(name: string): number | undefined {
+    const param = this.getParam(name);
+    if (param === null) return undefined;
+    const value = Number(param);
+    if (Number.isNaN(value)) return undefined;
+    return value;
+  }
 }
 
 let urlParamCache: {
@@ -403,6 +426,9 @@ export const computeUrlParams = (search = "", hash = ""): UrlParams => {
     sendNotificationType: "notification",
     autoLeaveWhenOthersLeft: false,
     waitForCallPickup: false,
+    audioInputNoiseGate: false,
+    audioInputNoiseGateThresholdDb: -60,
+    maxParticipantVolumePercent: 100,
   };
   switch (intent) {
     case UserIntent.StartNewCall:
@@ -450,6 +476,9 @@ export const computeUrlParams = (search = "", hash = ""): UrlParams => {
         sendNotificationType: undefined,
         autoLeaveWhenOthersLeft: false,
         waitForCallPickup: false,
+        audioInputNoiseGate: false,
+        audioInputNoiseGateThresholdDb: -60,
+        maxParticipantVolumePercent: 100,
       };
   }
 
@@ -505,6 +534,13 @@ export const computeUrlParams = (search = "", hash = ""): UrlParams => {
     autoLeaveWhenOthersLeft: parser.getFlag("autoLeave"),
     noiseSuppression: parser.getFlagParam("noiseSuppression", true),
     echoCancellation: parser.getFlagParam("echoCancellation", true),
+    audioInputNoiseGate: parser.getFlagParam("audioInputNoiseGate", false),
+    audioInputNoiseGateThresholdDb:
+      parser.getNumberParam("audioInputNoiseGateThresholdDb") ?? -60,
+    maxParticipantVolumePercent: Math.min(
+      200,
+      Math.max(0, parser.getNumberParam("maxParticipantVolumePercent") ?? 100),
+    ),
   };
 
   // Log the final configuration for debugging purposes.

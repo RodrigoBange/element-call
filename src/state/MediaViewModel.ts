@@ -52,6 +52,7 @@ import { type EncryptionSystem } from "../e2ee/sharedKeyManagement";
 import { E2eeType } from "../e2ee/e2eeType";
 import { type ReactionOption } from "../reactions";
 import { platform } from "../Platform";
+import { getUrlParams } from "../UrlParams";
 import { type MediaDevices } from "./MediaDevices";
 import { type Behavior } from "./Behavior";
 import { type ObservableScope } from "./ObservableScope";
@@ -659,6 +660,17 @@ export class RemoteUserMediaViewModel extends BaseUserMediaViewModel {
     ),
   );
 
+  /**
+   * Effective render volume, including forced mute when we intentionally
+   * simulate a disconnected participant.
+   */
+  public readonly effectiveLocalVolume$ = this.scope.behavior<number>(
+    this.pretendToBeDisconnected$.pipe(
+      switchMap((disconnected) => (disconnected ? of(0) : this.localVolume$)),
+      this.scope.bind(),
+    ),
+  );
+
   // This private field is used to override the value from the superclass
   private __videoEnabled$: Behavior<boolean>;
   public get videoEnabled$(): Behavior<boolean> {
@@ -718,17 +730,6 @@ export class RemoteUserMediaViewModel extends BaseUserMediaViewModel {
       ),
     );
 
-    // Sync the local volume with LiveKit
-    combineLatest([
-      participant$,
-      // The local volume, taking into account whether we're supposed to pretend
-      // that the audio stream is disconnected (since we don't necessarily want
-      // that to modify the UI state).
-      this.pretendToBeDisconnected$.pipe(
-        switchMap((disconnected) => (disconnected ? of(0) : this.localVolume$)),
-        this.scope.bind(),
-      ),
-    ]).subscribe(([p, volume]) => p?.setVolume(volume));
   }
 
   public toggleLocallyMuted(): void {
@@ -736,7 +737,8 @@ export class RemoteUserMediaViewModel extends BaseUserMediaViewModel {
   }
 
   public setLocalVolume(value: number): void {
-    this.localVolumeAdjustment$.next(value);
+    const maxVolume = getUrlParams().maxParticipantVolumePercent / 100;
+    this.localVolumeAdjustment$.next(Math.max(0, Math.min(value, maxVolume)));
   }
 
   public commitLocalVolume(): void {

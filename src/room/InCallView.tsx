@@ -758,6 +758,9 @@ export const InCallView: FC<InCallViewProps> = ({
   );
 
   const allConnections = useBehavior(vm.allConnections$);
+  const participantVolumeByIdentity = useBehavior(
+    vm.participantVolumeByIdentity$,
+  );
 
   return (
     <div
@@ -776,6 +779,7 @@ export const InCallView: FC<InCallViewProps> = ({
           url={url}
           livekitRoom={livekitRoom}
           validIdentities={participants}
+          participantVolumeByIdentity={participantVolumeByIdentity}
           muted={muteAllAudio}
         />
       ))}
