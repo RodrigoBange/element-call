@@ -368,8 +368,8 @@ describe("UrlParams", () => {
   });
 
   describe("audioInputNoiseGate", () => {
-    it("defaults to false", () => {
-      expect(computeUrlParams().audioInputNoiseGate).toBe(false);
+    it("defaults to true", () => {
+      expect(computeUrlParams().audioInputNoiseGate).toBe(true);
     });
 
     it("is parsed", () => {
@@ -381,21 +381,21 @@ describe("UrlParams", () => {
   });
 
   describe("audioInputNoiseGateThresholdDb", () => {
-    it("defaults to -60", () => {
-      expect(computeUrlParams().audioInputNoiseGateThresholdDb).toBe(-60);
+    it("defaults to -45", () => {
+      expect(computeUrlParams().audioInputNoiseGateThresholdDb).toBe(-45);
     });
 
     it("is parsed", () => {
       expect(computeUrlParams("?audioInputNoiseGateThresholdDb=-50")
         .audioInputNoiseGateThresholdDb).toBe(-50);
       expect(computeUrlParams("?audioInputNoiseGateThresholdDb=not-a-number")
-        .audioInputNoiseGateThresholdDb).toBe(-60);
+        .audioInputNoiseGateThresholdDb).toBe(-45);
     });
   });
 
   describe("maxParticipantVolumePercent", () => {
-    it("defaults to 100", () => {
-      expect(computeUrlParams().maxParticipantVolumePercent).toBe(100);
+    it("defaults to 200", () => {
+      expect(computeUrlParams().maxParticipantVolumePercent).toBe(200);
     });
 
     it("is parsed and clamped", () => {
@@ -406,7 +406,7 @@ describe("UrlParams", () => {
       expect(computeUrlParams("?maxParticipantVolumePercent=-1")
         .maxParticipantVolumePercent).toBe(0);
       expect(computeUrlParams("?maxParticipantVolumePercent=bad")
-        .maxParticipantVolumePercent).toBe(100);
+        .maxParticipantVolumePercent).toBe(200);
     });
   });
 
