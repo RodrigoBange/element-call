@@ -67,7 +67,6 @@ export class AudioInputProcessor {
     this.inputTrackId = null;
     this.inputTrackClone?.stop();
     this.inputTrackClone = null;
-    this.outputTrack?.stop();
     this.outputTrack = null;
     this.outputTrackId = null;
     if (this.audioContext) {
@@ -83,8 +82,28 @@ export class AudioInputProcessor {
     // Already publishing the processed output track.
     if (this.outputTrackId && sourceTrack.id === this.outputTrackId) return;
 
-    // Build/rebuild graph when the raw input track changes.
-    if (this.inputTrackId !== sourceTrack.id || !this.outputTrackId) {
+    // If we're still seeing the original raw input, do not rebuild; just ensure
+    // that the processed output is attached.
+    if (
+      this.inputTrackId &&
+      this.outputTrackId &&
+      sourceTrack.id === this.inputTrackId
+    ) {
+      if (localAudioTrack.mediaStreamTrack.id !== this.outputTrackId && this.outputTrack) {
+        try {
+          await localAudioTrack.replaceTrack(this.outputTrack, {
+            stopProcessor: false,
+          });
+        } catch (e) {
+          this.logger.error("Failed to attach local audio processor track", e);
+        }
+      }
+      return;
+    }
+
+    // Build/rebuild graph only when there is no graph yet, or when we see a
+    // genuinely new raw source track.
+    if (!this.outputTrackId || this.inputTrackId !== sourceTrack.id) {
       this.destroy();
       this.inputTrackId = sourceTrack.id;
       this.inputTrackClone = sourceTrack.clone();
@@ -124,13 +143,7 @@ export class AudioInputProcessor {
 
     // We are still publishing raw input. Keep retrying replace until output is active.
     if (this.outputTrackId && sourceTrack.id !== this.outputTrackId) {
-      const replacementTrack = localAudioTrack.mediaStreamTrack;
-      if (
-        this.inputTrackId &&
-        this.outputTrackId &&
-        this.outputTrack &&
-        replacementTrack.id !== this.outputTrackId
-      ) {
+      if (this.inputTrackId && this.outputTrackId && this.outputTrack) {
         try {
           await localAudioTrack.replaceTrack(this.outputTrack, {
             stopProcessor: false,
