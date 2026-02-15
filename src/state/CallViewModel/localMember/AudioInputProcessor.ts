@@ -22,6 +22,7 @@ export interface AudioInputProcessorOptions {
  */
 export class AudioInputProcessor {
   private inputTrackId: string | null = null;
+  private inputTrackClone: MediaStreamTrack | null = null;
   private outputTrackId: string | null = null;
   private audioContext: AudioContext | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
@@ -63,6 +64,8 @@ export class AudioInputProcessor {
     this.gateNode = null;
     this.analyser = null;
     this.inputTrackId = null;
+    this.inputTrackClone?.stop();
+    this.inputTrackClone = null;
     this.outputTrackId = null;
     if (this.audioContext) {
       void this.audioContext.close();
@@ -79,9 +82,12 @@ export class AudioInputProcessor {
 
     this.destroy();
     this.inputTrackId = sourceTrack.id;
+    this.inputTrackClone = sourceTrack.clone();
 
     const ctx = new AudioContext();
-    const source = ctx.createMediaStreamSource(new MediaStream([sourceTrack]));
+    const source = ctx.createMediaStreamSource(
+      new MediaStream([this.inputTrackClone]),
+    );
     const analyser = ctx.createAnalyser();
     analyser.fftSize = this.sampleBuffer.length;
 
@@ -111,7 +117,7 @@ export class AudioInputProcessor {
 
     try {
       await localAudioTrack.replaceTrack(processedTrack, {
-        stopProcessor: true,
+        stopProcessor: false,
       });
     } catch (e) {
       this.logger.error("Failed to attach local audio processor track", e);
