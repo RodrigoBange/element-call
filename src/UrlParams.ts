@@ -256,7 +256,7 @@ export interface UrlConfiguration {
   audioInputNoiseGateThresholdDb: number;
   /**
    * Maximum allowed per-participant volume in percent.
-   * Defaults to 200 and is clamped to 200.
+   * Defaults to 200 and is clamped to 300.
    */
   maxParticipantVolumePercent: number;
 
@@ -538,7 +538,7 @@ export const computeUrlParams = (search = "", hash = ""): UrlParams => {
     audioInputNoiseGateThresholdDb:
       parser.getNumberParam("audioInputNoiseGateThresholdDb") ?? -45,
     maxParticipantVolumePercent: Math.min(
-      200,
+      300,
       Math.max(0, parser.getNumberParam("maxParticipantVolumePercent") ?? 200),
     ),
   };

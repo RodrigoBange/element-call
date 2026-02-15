@@ -402,7 +402,7 @@ describe("UrlParams", () => {
       expect(computeUrlParams("?maxParticipantVolumePercent=150")
         .maxParticipantVolumePercent).toBe(150);
       expect(computeUrlParams("?maxParticipantVolumePercent=999")
-        .maxParticipantVolumePercent).toBe(200);
+        .maxParticipantVolumePercent).toBe(300);
       expect(computeUrlParams("?maxParticipantVolumePercent=-1")
         .maxParticipantVolumePercent).toBe(0);
       expect(computeUrlParams("?maxParticipantVolumePercent=bad")
