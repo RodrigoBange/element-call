@@ -145,3 +145,8 @@ export const customLivekitUrl = new Setting<string | null>(
   "custom-livekit-url",
   null,
 );
+
+export const participantVolumeByUserId = new Setting<Record<string, number>>(
+  "participant-volume-by-user-id",
+  {},
+);

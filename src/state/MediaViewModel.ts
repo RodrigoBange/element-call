@@ -45,8 +45,11 @@ import {
   distinctUntilChanged,
 } from "rxjs";
 
-import { alwaysShowSelf } from "../settings/settings";
-import { showConnectionStats } from "../settings/settings";
+import {
+  alwaysShowSelf,
+  participantVolumeByUserId,
+  showConnectionStats,
+} from "../settings/settings";
 import { accumulate } from "../utils/observable";
 import { type EncryptionSystem } from "../e2ee/sharedKeyManagement";
 import { E2eeType } from "../e2ee/e2eeType";
@@ -120,6 +123,11 @@ export function observeOutboundRtpStreamStats$(
   return observeRtpStreamStats$(participant, source, "outbound-rtp").pipe(
     map((x) => x as RTCOutboundRtpStreamStats | undefined),
   );
+}
+
+function clampParticipantVolume(value: number): number {
+  const maxVolume = getUrlParams().maxParticipantVolumePercent / 100;
+  return Math.max(0, Math.min(value, maxVolume));
 }
 
 function observeRemoteTrackReceivingOkay$(
@@ -624,6 +632,11 @@ export class RemoteUserMediaViewModel extends BaseUserMediaViewModel {
   private readonly locallyMutedToggle$ = new Subject<void>();
   private readonly localVolumeAdjustment$ = new Subject<number>();
   private readonly localVolumeCommit$ = new Subject<void>();
+  private readonly initialLocalVolume: number = (() => {
+    const persisted = participantVolumeByUserId.getValue()[this.userId];
+    if (typeof persisted !== "number" || Number.isNaN(persisted)) return 1;
+    return clampParticipantVolume(persisted);
+  })();
 
   /**
    * The volume to which this participant's audio is set, as a scalar
@@ -635,27 +648,33 @@ export class RemoteUserMediaViewModel extends BaseUserMediaViewModel {
       this.localVolumeAdjustment$,
       this.localVolumeCommit$.pipe(map(() => "commit" as const)),
     ).pipe(
-      accumulate({ volume: 1, committedVolume: 1 }, (state, event) => {
-        switch (event) {
-          case "toggle mute":
-            return {
-              ...state,
-              volume: state.volume === 0 ? state.committedVolume : 0,
-            };
-          case "commit":
-            // Dragging the slider to zero should have the same effect as
-            // muting: keep the original committed volume, as if it were never
-            // dragged
-            return {
-              ...state,
-              committedVolume:
-                state.volume === 0 ? state.committedVolume : state.volume,
-            };
-          default:
-            // Volume adjustment
-            return { ...state, volume: event };
-        }
-      }),
+      accumulate(
+        {
+          volume: this.initialLocalVolume,
+          committedVolume: this.initialLocalVolume,
+        },
+        (state, event) => {
+          switch (event) {
+            case "toggle mute":
+              return {
+                ...state,
+                volume: state.volume === 0 ? state.committedVolume : 0,
+              };
+            case "commit":
+              // Dragging the slider to zero should have the same effect as
+              // muting: keep the original committed volume, as if it were never
+              // dragged
+              return {
+                ...state,
+                committedVolume:
+                  state.volume === 0 ? state.committedVolume : state.volume,
+              };
+            default:
+              // Volume adjustment
+              return { ...state, volume: event };
+          }
+        },
+      ),
       map(({ volume }) => volume),
     ),
   );
@@ -736,9 +755,21 @@ export class RemoteUserMediaViewModel extends BaseUserMediaViewModel {
     this.locallyMutedToggle$.next();
   }
 
+  private persistLocalVolume(value: number): void {
+    // Keep last audible level so temporary muting does not persist as 0.
+    if (value <= 0) return;
+    const current = participantVolumeByUserId.getValue();
+    if (current[this.userId] === value) return;
+    participantVolumeByUserId.setValue({
+      ...current,
+      [this.userId]: value,
+    });
+  }
+
   public setLocalVolume(value: number): void {
-    const maxVolume = getUrlParams().maxParticipantVolumePercent / 100;
-    this.localVolumeAdjustment$.next(Math.max(0, Math.min(value, maxVolume)));
+    const clamped = clampParticipantVolume(value);
+    this.localVolumeAdjustment$.next(clamped);
+    this.persistLocalVolume(clamped);
   }
 
   public commitLocalVolume(): void {
