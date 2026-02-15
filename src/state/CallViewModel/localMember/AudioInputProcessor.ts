@@ -23,6 +23,7 @@ export interface AudioInputProcessorOptions {
 export class AudioInputProcessor {
   private inputTrackId: string | null = null;
   private inputTrackClone: MediaStreamTrack | null = null;
+  private outputTrack: MediaStreamTrack | null = null;
   private outputTrackId: string | null = null;
   private audioContext: AudioContext | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
@@ -66,6 +67,8 @@ export class AudioInputProcessor {
     this.inputTrackId = null;
     this.inputTrackClone?.stop();
     this.inputTrackClone = null;
+    this.outputTrack?.stop();
+    this.outputTrack = null;
     this.outputTrackId = null;
     if (this.audioContext) {
       void this.audioContext.close();
@@ -77,50 +80,65 @@ export class AudioInputProcessor {
     localAudioTrack: LocalAudioTrack,
     sourceTrack: MediaStreamTrack,
   ): Promise<void> {
+    // Already publishing the processed output track.
     if (this.outputTrackId && sourceTrack.id === this.outputTrackId) return;
-    if (this.inputTrackId && sourceTrack.id === this.inputTrackId) return;
 
-    this.destroy();
-    this.inputTrackId = sourceTrack.id;
-    this.inputTrackClone = sourceTrack.clone();
+    // Build/rebuild graph when the raw input track changes.
+    if (this.inputTrackId !== sourceTrack.id || !this.outputTrackId) {
+      this.destroy();
+      this.inputTrackId = sourceTrack.id;
+      this.inputTrackClone = sourceTrack.clone();
 
-    const ctx = new AudioContext();
-    const source = ctx.createMediaStreamSource(
-      new MediaStream([this.inputTrackClone]),
-    );
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = this.sampleBuffer.length;
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(
+        new MediaStream([this.inputTrackClone]),
+      );
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = this.sampleBuffer.length;
 
-    const boost = ctx.createGain();
-    boost.gain.value = this.dbToLinear(this.options.micBoostDb);
+      const boost = ctx.createGain();
+      boost.gain.value = this.dbToLinear(this.options.micBoostDb);
 
-    const gate = ctx.createGain();
-    gate.gain.value = 1;
+      const gate = ctx.createGain();
+      gate.gain.value = 1;
 
-    const destination = ctx.createMediaStreamDestination();
+      const destination = ctx.createMediaStreamDestination();
 
-    source.connect(analyser);
-    source.connect(boost);
-    boost.connect(gate);
-    gate.connect(destination);
+      source.connect(analyser);
+      source.connect(boost);
+      boost.connect(gate);
+      gate.connect(destination);
 
-    const processedTrack = destination.stream.getAudioTracks()[0];
-    if (!processedTrack) return;
+      const processedTrack = destination.stream.getAudioTracks()[0];
+      if (!processedTrack) return;
 
-    this.audioContext = ctx;
-    this.sourceNode = source;
-    this.analyser = analyser;
-    this.boostNode = boost;
-    this.gateNode = gate;
-    this.outputTrackId = processedTrack.id;
-    this.gateOpen = true;
+      this.audioContext = ctx;
+      this.sourceNode = source;
+      this.analyser = analyser;
+      this.boostNode = boost;
+      this.gateNode = gate;
+      this.outputTrack = processedTrack;
+      this.outputTrackId = processedTrack.id;
+      this.gateOpen = true;
+    }
 
-    try {
-      await localAudioTrack.replaceTrack(processedTrack, {
-        stopProcessor: false,
-      });
-    } catch (e) {
-      this.logger.error("Failed to attach local audio processor track", e);
+    // We are still publishing raw input. Keep retrying replace until output is active.
+    if (this.outputTrackId && sourceTrack.id !== this.outputTrackId) {
+      const replacementTrack = localAudioTrack.mediaStreamTrack;
+      if (
+        this.inputTrackId &&
+        this.outputTrackId &&
+        this.outputTrack &&
+        replacementTrack.id !== this.outputTrackId
+      ) {
+        try {
+          await localAudioTrack.replaceTrack(this.outputTrack, {
+            stopProcessor: false,
+          });
+        } catch (e) {
+          this.logger.error("Failed to attach local audio processor track", e);
+        }
+      }
     }
   }
 
