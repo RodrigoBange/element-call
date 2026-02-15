@@ -43,6 +43,13 @@ export enum ElementWidgetActions {
   //   video_enabled?: boolean
   // }
   DeviceMute = "io.element.device_mute",
+  // toWidget: live updates for audio input processing configuration.
+  // {
+  //   audio_input_noise_gate?: boolean,
+  //   audio_input_noise_gate_threshold_db?: number,
+  //   mic_boost_db?: number
+  // }
+  AudioInputProcessing = "io.element.audio_input_processing",
 }
 
 export interface JoinCallData {
@@ -102,6 +109,7 @@ export const initializeWidget = (
         ElementWidgetActions.JoinCall,
         ElementWidgetActions.HangupCall,
         ElementWidgetActions.DeviceMute,
+        ElementWidgetActions.AudioInputProcessing,
       ].forEach((action) => {
         api.on(`action:${action}`, (ev: CustomEvent<IWidgetApiRequest>) => {
           ev.preventDefault();

@@ -21,6 +21,7 @@ import {
   switchMap,
 } from "rxjs";
 import { type Logger } from "matrix-js-sdk/lib/logger";
+import type { IWidgetApiRequest } from "matrix-widget-api";
 
 import type { Behavior } from "../../Behavior.ts";
 import type { MediaDevices, SelectedDevice } from "../../MediaDevices.ts";
@@ -37,6 +38,7 @@ import {
   AudioInputProcessor,
   type AudioInputProcessorOptions,
 } from "./AudioInputProcessor.ts";
+import { ElementWidgetActions, widget } from "../../../widget.ts";
 
 /**
  * A wrapper for a Connection object.
@@ -286,7 +288,6 @@ export class Publisher {
   private setupAudioInputNoiseGate(): void {
     const { audioInputNoiseGate, audioInputNoiseGateThresholdDb } =
       getUrlParams();
-    if (!audioInputNoiseGate) return;
 
     const lkRoom = this.connection.livekitRoom;
     const processorOptions: AudioInputProcessorOptions = {
@@ -294,10 +295,58 @@ export class Publisher {
       noiseGateThresholdDb: audioInputNoiseGateThresholdDb,
       micBoostDb: 0,
     };
+    const currentOptions: AudioInputProcessorOptions = { ...processorOptions };
     this.audioInputProcessor?.destroy();
     this.audioInputProcessor = new AudioInputProcessor(
       processorOptions,
       this.logger,
+    );
+
+    const clamp = (value: number, min: number, max: number): number =>
+      Math.min(max, Math.max(min, value));
+
+    const onAudioInputProcessing = (ev: CustomEvent<IWidgetApiRequest>): void => {
+      ev.preventDefault();
+      const data = (ev.detail.data ?? {}) as {
+        audio_input_noise_gate?: unknown;
+        audio_input_noise_gate_threshold_db?: unknown;
+        mic_boost_db?: unknown;
+      };
+
+      const next: Partial<AudioInputProcessorOptions> = {};
+      if (typeof data.audio_input_noise_gate === "boolean") {
+        next.noiseGateEnabled = data.audio_input_noise_gate;
+      }
+      if (
+        typeof data.audio_input_noise_gate_threshold_db === "number" &&
+        Number.isFinite(data.audio_input_noise_gate_threshold_db)
+      ) {
+        next.noiseGateThresholdDb = clamp(
+          data.audio_input_noise_gate_threshold_db,
+          -80,
+          0,
+        );
+      }
+      if (typeof data.mic_boost_db === "number" && Number.isFinite(data.mic_boost_db)) {
+        next.micBoostDb = clamp(data.mic_boost_db, -24, 24);
+      }
+
+      if (next.noiseGateEnabled !== undefined)
+        currentOptions.noiseGateEnabled = next.noiseGateEnabled;
+      if (next.noiseGateThresholdDb !== undefined)
+        currentOptions.noiseGateThresholdDb = next.noiseGateThresholdDb;
+      if (next.micBoostDb !== undefined) currentOptions.micBoostDb = next.micBoostDb;
+
+      this.audioInputProcessor?.updateOptions(next);
+      widget?.api.transport.reply(ev.detail, {
+        audio_input_noise_gate: currentOptions.noiseGateEnabled,
+        audio_input_noise_gate_threshold_db: currentOptions.noiseGateThresholdDb,
+        mic_boost_db: currentOptions.micBoostDb,
+      });
+    };
+    widget?.lazyActions.on(
+      ElementWidgetActions.AudioInputProcessing,
+      onAudioInputProcessing,
     );
 
     const tick = (): void => {
@@ -318,6 +367,10 @@ export class Publisher {
     const intervalId = setInterval(tick, 80);
     this.noiseGateCleanup = (): void => {
       clearInterval(intervalId);
+      widget?.lazyActions.off(
+        ElementWidgetActions.AudioInputProcessing,
+        onAudioInputProcessing,
+      );
       this.audioInputProcessor?.destroy();
       this.audioInputProcessor = undefined;
     };
